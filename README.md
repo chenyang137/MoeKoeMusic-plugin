@@ -117,7 +117,7 @@ const state = {
 
 ## 兼容性
 
-- ✅ MoeKoeMusic v2.0+
+- ✅ MoeKoeMusic v1.5.9
 - ✅ Electron 20+
 - ✅ Chrome Extension Manifest V3
 

@@ -149,16 +149,35 @@
             return;
         }
 
-        // 初始化前两张图片
+        // 初始化第一张图片
         updateBackgroundLayer(images[0]);
+        
+        // 确保第二张图片与第一张不同
+        let secondImageIndex = 1;
+        if (images.length > 1 && images[0] === images[1]) {
+            // 如果前两张相同，找第三张不同的
+            for (let i = 2; i < images.length; i++) {
+                if (images[i] !== images[0]) {
+                    secondImageIndex = i;
+                    break;
+                }
+            }
+        }
+        
         setTimeout(() => {
-            updateBackgroundLayer(images[1] || images[0]);
+            updateBackgroundLayer(images[secondImageIndex] || images[0]);
         }, 100);
 
         // 启动轮播
         state.backgroundRotationTimer = setInterval(() => {
             state.currentBackgroundIndex = (state.currentBackgroundIndex + 1) % images.length;
             const nextImage = images[state.currentBackgroundIndex];
+            
+            // 跳过与当前图片相同的图片
+            const currentImage = state.activeLayer === 1 ? state.backgroundImage2 : state.backgroundImage1;
+            if (nextImage === currentImage) {
+                return; // 跳过相同的图片
+            }
 
             // 预加载下一张图片
             const img = new Image();
@@ -186,6 +205,98 @@
     }
 
     /**
+     * 多歌手写真交替播放策略
+     * @param {string[][]} imagesByArtist - 每个歌手的写真数组 [歌手 1 的写真，歌手 2 的写真，...]
+     */
+    function startAlternatingRotation(imagesByArtist) {
+        clearRotationTimer();
+        
+        if (!imagesByArtist || imagesByArtist.length === 0) return;
+        
+        // 记录每个歌手的当前索引
+        const artistIndices = imagesByArtist.map(() => 0);
+        let currentArtistIndex = 0;
+        
+        // 获取下一张图片（交替策略）
+        const getNextImage = () => {
+            // 获取当前歌手的写真列表
+            const currentArtistImages = imagesByArtist[currentArtistIndex];
+            
+            // 如果这个歌手没有写真，跳过到下一个
+            if (!currentArtistImages || currentArtistImages.length === 0) {
+                currentArtistIndex = (currentArtistIndex + 1) % imagesByArtist.length;
+                return getNextImage();
+            }
+            
+            // 获取当前歌手的当前图片
+            const imageIndex = artistIndices[currentArtistIndex];
+            const image = currentArtistImages[imageIndex];
+            
+            // 更新这个歌手的索引（循环）
+            artistIndices[currentArtistIndex] = (imageIndex + 1) % currentArtistImages.length;
+            
+            // 移动到下一个歌手
+            currentArtistIndex = (currentArtistIndex + 1) % imagesByArtist.length;
+            
+            return image;
+        };
+        
+        // 初始化第一张图片
+        const firstImage = getNextImage();
+        if (firstImage) {
+            updateBackgroundLayer(firstImage);
+        }
+        
+        // 初始化第二张不同的图片
+        setTimeout(() => {
+            let secondImage = getNextImage();
+            // 如果第二张与第一张相同，继续找下一张
+            while (secondImage && secondImage === firstImage) {
+                secondImage = getNextImage();
+            }
+            if (secondImage) {
+                updateBackgroundLayer(secondImage);
+            }
+        }, 100);
+        
+        // 启动轮播
+        state.backgroundRotationTimer = setInterval(() => {
+            const nextImage = getNextImage();
+            
+            if (!nextImage) return;
+            
+            // 跳过与当前图片相同的图片
+            const currentImage = state.activeLayer === 1 ? state.backgroundImage2 : state.backgroundImage1;
+            if (nextImage === currentImage) {
+                return; // 跳过相同的图片
+            }
+            
+            // 预加载下一张图片
+            const img = new Image();
+            img.src = nextImage;
+            
+            img.onload = () => {
+                // 确保图片完全解码后再切换
+                if ('decode' in img) {
+                    img.decode().then(() => {
+                        updateBackgroundLayer(nextImage);
+                    }).catch(() => {
+                        updateBackgroundLayer(nextImage);
+                    });
+                } else {
+                    updateBackgroundLayer(nextImage);
+                }
+            };
+            
+            img.onerror = (error) => {
+                console.warn('[ArtistWallpaper] 背景图加载失败:', nextImage, error);
+            };
+        }, state.rotationInterval);
+        
+        console.log('[ArtistWallpaper] 启动交替轮播，歌手数量:', imagesByArtist.length);
+    }
+
+    /**
      * 使用专辑封面作为背景
      */
     function useAlbumCoverAsBackground(albumCoverUrl) {
@@ -199,12 +310,12 @@
     }
 
     /**
-     * 获取多个歌手的写真并合并
+     * 获取多个歌手的写真并交替播放
      * @param {string[]} artistIds - 歌手 ID 数组
      * @param {string[]} artistNames - 歌手名称数组
      */
     async function fetchMultipleArtistsBackground(artistIds, artistNames) {
-        const allImages = [];
+        const allImagesByArtist = [];
         
         try {
             // 并发获取所有歌手的写真
@@ -231,16 +342,16 @@
             
             const results = await Promise.all(promises);
             
-            // 合并所有图片
+            // 保存每个歌手的写真数组
             results.forEach(images => {
-                allImages.push(...images);
+                if (images && images.length > 0) {
+                    allImagesByArtist.push(images);
+                }
             });
             
-            // 去重
-            const uniqueImages = [...new Set(allImages)];
-            
-            if (uniqueImages.length > 0) {
-                startRotation(uniqueImages);
+            if (allImagesByArtist.length > 0) {
+                // 使用交替播放策略
+                startAlternatingRotation(allImagesByArtist);
             } else {
                 // 没有歌手写真，使用专辑封面
                 const currentSong = getCurrentSong();

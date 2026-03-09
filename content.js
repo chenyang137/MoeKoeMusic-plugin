@@ -696,10 +696,9 @@
                 transform-origin: center center !important;
             }
             
-            /* 调整进度条容器 */
+            /* 调整进度条容器 - 使用 zoom 而不是 transform 以保持点击位置一致 */
             .lyrics-screen .left-section .progress-bar-container {
-                transform: scale(0.67) !important;
-                transform-origin: center center !important;
+                zoom: 0.67;
                 margin-top: 10px !important;
                 margin-bottom: 10px !important;
             }

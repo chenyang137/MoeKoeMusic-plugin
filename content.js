@@ -646,16 +646,8 @@
                             startSongCheckInterval();
                         }
                         
-                        // 每次歌词界面显示时都检查歌曲是否变化
-                        const currentSong = getCurrentSong();
-                        const currentHash = currentSong?.hash;
-                        
-                        // 如果歌曲变化了，更新写真
-                        if (currentHash && currentHash !== lastSongHash) {
-                            console.log('[ArtistWallpaper] MutationObserver - 歌曲切换:', currentHash);
-                            lastSongHash = currentHash;
-                            handleSongChange();
-                        }
+                        // 注意：不再在这里检查歌曲变化，避免使用缓存的旧歌曲数据
+                        // 只通过定时器检查歌曲变化
                     } else {
                         // 歌词界面隐藏时
                         state.isInitialized = false;

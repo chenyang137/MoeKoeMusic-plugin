@@ -11,15 +11,13 @@
         artistBackgroundImages: [],
         currentBackgroundIndex: 0,
         backgroundRotationTimer: null,
-        currentArtistId: null,
         backgroundImage1: null,
         backgroundImage2: null,
         activeLayer: 1,
         rotationInterval: 10000, // 10 秒轮播
         isInitialized: false,
         observer: null,
-        checkInterval: null,
-        lastSongHash: null
+        checkInterval: null
     };
 
     /**
@@ -116,8 +114,6 @@
         
         // 插入到 lyrics-screen 的最前面
         lyricsScreen.insertBefore(bgContainer, lyricsScreen.firstChild);
-
-        console.log('[ArtistWallpaper] 背景图层初始化完成');
     }
 
     /**
@@ -127,7 +123,6 @@
         if (state.backgroundRotationTimer) {
             clearInterval(state.backgroundRotationTimer);
             state.backgroundRotationTimer = null;
-            console.log('[ArtistWallpaper] 清除轮播定时器');
         }
     }
 
@@ -161,7 +156,6 @@
         // 如果所有图片都相同，只使用一张图片，不轮播
         if (secondImageIndex === -1) {
             updateBackgroundLayer(images[0]);
-            console.log('[ArtistWallpaper] 所有图片相同，不启动轮播');
             return;
         }
 
@@ -200,8 +194,6 @@
                     layer2.style.transition = 'opacity 1s ease-in-out';
                 }, 50);
                 
-                console.log('[ArtistWallpaper] 初始化完成，启动轮播');
-                
                 // 设置当前索引为 secondImageIndex，这样下次就会切换到下一张
                 state.currentBackgroundIndex = secondImageIndex;
                 
@@ -213,16 +205,8 @@
                     // 获取当前显示的图片
                     const currentImage = state.activeLayer === 1 ? state.backgroundImage2 : state.backgroundImage1;
                     
-                    console.log('[ArtistWallpaper] 轮播检查:', {
-                        nextImage: nextImage,
-                        currentImage: currentImage,
-                        activeLayer: state.activeLayer,
-                        isSame: nextImage === currentImage
-                    });
-                    
                     // 跳过与当前图片相同的图片
                     if (nextImage === currentImage) {
-                        console.log('[ArtistWallpaper] 跳过相同图片');
                         return; // 跳过相同的图片
                     }
 
@@ -234,7 +218,6 @@
                         // 确保图片完全解码后再切换
                         if ('decode' in img) {
                             img.decode().then(() => {
-                                console.log('[ArtistWallpaper] 图片解码完成，准备切换');
                                 updateBackgroundLayer(nextImage);
                             }).catch(() => {
                                 updateBackgroundLayer(nextImage);
@@ -257,8 +240,6 @@
         // 如果图片已经在缓存中，手动触发 onload
         if (img1.complete) onBothLoaded();
         if (img2.complete) onBothLoaded();
-
-        console.log('[ArtistWallpaper] 正在预加载前两张图片...');
     }
 
     /**
@@ -312,7 +293,6 @@
             if (firstImage) {
                 updateBackgroundLayer(firstImage);
             }
-            console.log('[ArtistWallpaper] 多歌手：无法找到两张不同的图片，不启动轮播');
             return;
         }
         
@@ -350,8 +330,6 @@
                     layer1.style.transition = 'opacity 1s ease-in-out';
                     layer2.style.transition = 'opacity 1s ease-in-out';
                 }, 50);
-                
-                console.log('[ArtistWallpaper] 多歌手交替轮播初始化完成');
                 
                 // 启动轮播定时器
                 state.backgroundRotationTimer = setInterval(() => {
@@ -395,8 +373,6 @@
         // 如果图片已经在缓存中，手动触发 onload
         if (img1.complete) onBothLoaded();
         if (img2.complete) onBothLoaded();
-        
-        console.log('[ArtistWallpaper] 多歌手：正在预加载前两张图片...');
     }
 
     /**
@@ -408,8 +384,6 @@
         
         const defaultBg = albumCoverUrl || 'https://random.MoeJue.cn/randbg.php';
         updateBackgroundLayer(defaultBg);
-        
-        console.log('[ArtistWallpaper] 使用专辑封面作为背景');
     }
 
     /**
@@ -588,7 +562,6 @@
                 // 单歌手情况
                 const id = await fetchArtistIdByName(artistNames[0] || author);
                 if (id) {
-                    state.currentArtistId = id;
                     fetchArtistBackground(artistNames[0] || author, id);
                 } else {
                     useAlbumCoverAsBackground(currentSong.img);
@@ -615,19 +588,10 @@
                 
                 // 如果歌曲变化了，更新写真
                 if (currentHash && currentHash !== lastSongHash) {
-                    console.log('[ArtistWallpaper] 定时检测 - 歌曲切换:', currentHash);
                     lastSongHash = currentHash;
                     handleSongChange();
                 }
             }, 1000); // 每秒检查一次
-        };
-        
-        // 停止定时检查
-        const stopSongCheckInterval = () => {
-            if (checkInterval) {
-                clearInterval(checkInterval);
-                checkInterval = null;
-            }
         };
         
         // 使用 MutationObserver 监听 DOM 变化
@@ -651,7 +615,10 @@
                     } else {
                         // 歌词界面隐藏时
                         state.isInitialized = false;
-                        stopSongCheckInterval();
+                        if (checkInterval) {
+                            clearInterval(checkInterval);
+                            checkInterval = null;
+                        }
                     }
                 }
             }
@@ -661,8 +628,6 @@
             childList: true,
             subtree: true
         });
-
-        console.log('[ArtistWallpaper] 观察者已启动');
     }
 
     /**
@@ -671,48 +636,9 @@
     function setupStorageListener() {
         window.addEventListener('storage', (event) => {
             if (event.key === 'current_song') {
-                console.log('[ArtistWallpaper] 检测到歌曲变化');
                 handleSongChange();
             }
         });
-    }
-
-    /**
-     * 注入播放控件缩小样式
-     */
-    function injectMiniPlayerControlStyles() {
-        // 检查是否已注入
-        if (document.getElementById('mini-player-control-styles')) {
-            console.log('[MiniPlayerControl] 样式已存在，跳过注入');
-            return;
-        }
-        
-        const style = document.createElement('style');
-        style.id = 'mini-player-control-styles';
-        style.textContent = `
-            /* 当歌词界面显示时，缩小左侧播放控件为原来的 2/3 */
-            .lyrics-screen .left-section .player-controls {
-                transform: scale(0.67) !important;
-                transform-origin: center center !important;
-            }
-            
-            /* 调整进度条容器 - 使用 zoom 而不是 transform 以保持点击位置一致 */
-            .lyrics-screen .left-section .progress-bar-container {
-                zoom: 0.67;
-                margin-top: 10px !important;
-                margin-bottom: 10px !important;
-            }
-            
-            /* 调整歌曲详情间距 */
-            .lyrics-screen .left-section .song-details {
-                margin-bottom: 10px !important;
-            }
-        `;
-        
-        // 将样式注入到页面
-        (document.head || document.documentElement).appendChild(style);
-        
-        console.log('[MiniPlayerControl] 播放控件缩小样式已注入');
     }
 
     /**
@@ -735,39 +661,23 @@
         // 移除背景容器
         const bgContainer = document.getElementById('wallpaper-container');
         if (bgContainer) bgContainer.remove();
-        
-        // 移除设置界面和按钮
-        const settingsPanel = document.getElementById('wallpaper-settings-panel');
-        if (settingsPanel) settingsPanel.remove();
-        
-        const settingsBtn = document.getElementById('wallpaper-settings-btn');
-        if (settingsBtn) settingsBtn.remove();
-        
-        // 移除播放控件缩小样式
-        const miniPlayerStyles = document.getElementById('mini-player-control-styles');
-        if (miniPlayerStyles) miniPlayerStyles.remove();
 
         state.isInitialized = false;
-        console.log('[ArtistWallpaper] 已清理资源');
     }
 
     /**
      * 初始化插件
      */
     function init() {
-        console.log('[ArtistWallpaper] 插件初始化');
-
         // 等待 DOM 加载完成
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
                 setupLyricsObserver();
                 setupStorageListener();
-                injectMiniPlayerControlStyles();
             });
         } else {
             setupLyricsObserver();
             setupStorageListener();
-            injectMiniPlayerControlStyles();
         }
 
         // 监听页面卸载

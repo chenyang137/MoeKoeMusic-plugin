@@ -91,6 +91,39 @@
     margin-left: 20px !important;
 }
 
+/* 播放控件缩小到 2/3 */
+.lyrics-screen .left-section .player-controls {
+    transform: scale(0.67) !important;
+    transform-origin: center center !important;
+}
+
+/* 进度条容器通过调整宽度来缩小，保持点击位置一致 */
+.lyrics-screen .left-section .progress-bar-container {
+    width: 67% !important; /* 缩小到 2/3 */
+    margin-left: auto !important;
+    margin-right: auto !important;
+    margin-top: 15px !important;
+    margin-bottom: 15px !important;
+}
+
+/* 进度条高度稍微减小 */
+.lyrics-screen .left-section .progress-bar-container .progress-bar {
+    height: 2px !important;
+}
+
+/* 进度条拖动按钮缩小 */
+.lyrics-screen .left-section .progress-bar-container .progress-handle {
+    width: 10px !important;
+    height: 10px !important;
+}
+
+/* 时间显示字体缩小 */
+.lyrics-screen .left-section .progress-bar-container .current-time,
+.lyrics-screen .left-section .progress-bar-container .duration {
+    font-size: 12px !important;
+    opacity: 0.85 !important;
+}
+
 /* 只缩小专辑图到原来的 1/2 */
 .lyrics-screen .album-art-large img {
     width: 200px !important; /* 400px / 2 */
@@ -111,40 +144,5 @@
 .lyrics-screen .vinyl-cover {
     width: 120px !important; /* 240px / 2 */
     height: 120px !important;
-}
-
-/* 背景图淡入淡出动画 */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-@keyframes fadeOut {
-    from {
-        opacity: 1;
-    }
-    to {
-        opacity: 0;
-    }
-}
-
-/* 移动端适配 */
-@media (max-width: 768px) {
-    .wallpaper-layer {
-        background-size: cover !important;
-        background-position: center !important;
-    }
-}
-
-/* 高分辨率屏幕适配 */
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-    .wallpaper-layer {
-        background-size: cover;
-        background-position: center center;
-    }
 }
 

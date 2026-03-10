@@ -17,7 +17,8 @@
         rotationInterval: 10000, // 10 秒轮播
         isInitialized: false,
         observer: null,
-        checkInterval: null
+        checkInterval: null,
+        isFetchingWallpaper: false // 防止并发请求
     };
 
     /**
@@ -51,6 +52,22 @@
                 layer1.style.opacity = '1';
             });
         }
+    }
+
+    /**
+     * 清除背景图层缓存
+     */
+    function clearBackgroundLayers() {
+        const layer1 = document.getElementById('wallpaper-layer-1');
+        const layer2 = document.getElementById('wallpaper-layer-2');
+        
+        if (!layer1 || !layer2) return;
+        
+        // 清除两个图层的背景图片
+        layer1.style.backgroundImage = 'none';
+        layer2.style.backgroundImage = 'none';
+        layer1.style.opacity = '0';
+        layer2.style.opacity = '0';
     }
 
     /**
@@ -392,6 +409,9 @@
      * @param {string[]} artistNames - 歌手名称数组
      */
     async function fetchMultipleArtistsBackground(artistIds, artistNames) {
+        // 再次清除定时器，确保不会重复
+        clearRotationTimer();
+        
         const allImagesByArtist = [];
         
         try {
@@ -487,6 +507,9 @@
      * @param {string} artistId - 歌手 ID
      */
     async function fetchArtistBackground(artistName, artistId) {
+        // 再次清除定时器，确保不会重复
+        clearRotationTimer();
+        
         if (!artistId) {
             // 尝试通过搜索获取歌手 ID
             const searchedId = await fetchArtistIdByName(artistName);
@@ -523,12 +546,23 @@
         const currentSong = getCurrentSong();
         if (!currentSong) return;
 
+        // 防止并发请求，如果正在获取写真，先取消之前的请求
+        state.isFetchingWallpaper = false;
+
         const artistId = currentSong.author_id || currentSong.singerid;
         const author = currentSong.author || '';
 
-        // 清除之前的写真和定时器
+        // 清除之前的写真和定时器，以及所有状态
         clearRotationTimer();
         state.artistBackgroundImages = [];
+        state.backgroundImage1 = null;
+        state.backgroundImage2 = null;
+        state.activeLayer = 1;
+        
+        // 清除 DOM 中的背景图层缓存
+        clearBackgroundLayers();
+        
+        state.isFetchingWallpaper = true; // 标记开始获取
 
         if (artistId) {
             // 检查是否有多个歌手
@@ -537,10 +571,10 @@
             
             if (artistIds.length > 1) {
                 // 多歌手情况：获取所有歌手的写真
-                fetchMultipleArtistsBackground(artistIds, artistNames);
+                await fetchMultipleArtistsBackground(artistIds, artistNames);
             } else {
                 // 单歌手情况
-                fetchArtistBackground(artistNames[0] || author, artistIds[0]);
+                await fetchArtistBackground(artistNames[0] || author, artistIds[0]);
             }
         } else if (author) {
             // 歌曲数据中没有歌手 ID，尝试通过搜索获取
@@ -550,19 +584,18 @@
                 // 多歌手情况：分别搜索每个歌手
                 const searchPromises = artistNames.map(name => fetchArtistIdByName(name));
                 
-                Promise.all(searchPromises).then(results => {
-                    const ids = results.filter(id => id !== null);
-                    if (ids.length > 0) {
-                        fetchMultipleArtistsBackground(ids, artistNames);
-                    } else {
-                        useAlbumCoverAsBackground(currentSong.img);
-                    }
-                });
+                const results = await Promise.all(searchPromises);
+                const ids = results.filter(id => id !== null);
+                if (ids.length > 0) {
+                    await fetchMultipleArtistsBackground(ids, artistNames);
+                } else {
+                    useAlbumCoverAsBackground(currentSong.img);
+                }
             } else {
                 // 单歌手情况
                 const id = await fetchArtistIdByName(artistNames[0] || author);
                 if (id) {
-                    fetchArtistBackground(artistNames[0] || author, id);
+                    await fetchArtistBackground(artistNames[0] || author, id);
                 } else {
                     useAlbumCoverAsBackground(currentSong.img);
                 }
@@ -570,6 +603,8 @@
         } else {
             useAlbumCoverAsBackground(currentSong.img);
         }
+        
+        state.isFetchingWallpaper = false; // 标记获取完成
     }
 
     /**

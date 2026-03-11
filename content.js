@@ -150,13 +150,21 @@
      * @param {string[]} images - 写真图片 URL 数组
      */
     function startRotation(images) {
+        // 立即清除所有状态和定时器
         clearRotationTimer();
-
+        state.isTransitioning = false;
+        
         if (!images || images.length === 0) return;
 
-        state.artistBackgroundImages = images;
+        // 保存当前歌曲 hash 到闭包中，用于定时器验证
+        const currentSongHashForRotation = state.currentSongHash;
+
+        // 重置所有状态，防止上一首歌的数据污染
+        state.artistBackgroundImages = [...images]; // 复制数组
         state.currentBackgroundIndex = 0;
-        state.isTransitioning = false; // 重置切换标志
+        state.backgroundImage1 = null;
+        state.backgroundImage2 = null;
+        state.activeLayer = 1;
 
         // 只有一张图片时，不轮播
         if (images.length === 1) {
@@ -219,6 +227,13 @@
                 
                 // 启动轮播定时器
                 state.backgroundRotationTimer = setInterval(() => {
+                    // 关键检查：如果歌曲已经切换，停止定时器
+                    if (state.currentSongHash !== currentSongHashForRotation) {
+                        console.log('[ArtistWallpaper] 歌曲已切换，停止旧轮播定时器');
+                        clearRotationTimer();
+                        return;
+                    }
+                    
                     // 如果正在切换中，跳过本次定时器触发
                     if (state.isTransitioning) {
                         return;
@@ -243,6 +258,13 @@
                     img.src = nextImage;
 
                     img.onload = () => {
+                        // 再次检查歌曲是否已切换
+                        if (state.currentSongHash !== currentSongHashForRotation) {
+                            console.log('[ArtistWallpaper] 图片加载中歌曲已切换，放弃');
+                            state.isTransitioning = false;
+                            return;
+                        }
+                        
                         // 确保图片完全解码后再切换
                         if ('decode' in img) {
                             img.decode().then(() => {
@@ -279,15 +301,25 @@
      * @param {string[][]} imagesByArtist - 每个歌手的写真数组 [歌手 1 的写真，歌手 2 的写真，...]
      */
     function startAlternatingRotation(imagesByArtist) {
-        // 再次清除定时器，确保不会有旧的定时器在运行
+        // 立即清除所有状态和定时器
         clearRotationTimer();
+        state.isTransitioning = false;
             
         if (!imagesByArtist || imagesByArtist.length === 0) return;
             
-        // 记录每个歌手的当前索引
+        // 保存当前歌曲 hash 到闭包中，用于定时器验证
+        const currentSongHashForAlternating = state.currentSongHash;
+            
+        // 重置所有状态，防止上一首歌的数据污染
+        state.artistBackgroundImages = [];
+        state.currentBackgroundIndex = 0;
+        state.backgroundImage1 = null;
+        state.backgroundImage2 = null;
+        state.activeLayer = 1;
+            
+        // 记录每个歌手的当前索引（局部变量，不使用 state）
         const artistIndices = imagesByArtist.map(() => 0);
         let currentArtistIndex = 0;
-        state.isTransitioning = false; // 重置切换标志
             
         // 获取下一张图片（交替策略）
         const getNextImage = () => {
@@ -372,6 +404,13 @@
                     
                 // 启动轮播定时器
                 state.backgroundRotationTimer = setInterval(() => {
+                    // 关键检查：如果歌曲已经切换，停止定时器
+                    if (state.currentSongHash !== currentSongHashForAlternating) {
+                        console.log('[ArtistWallpaper] 歌曲已切换，停止旧轮播定时器');
+                        clearRotationTimer();
+                        return;
+                    }
+                    
                     // 如果正在切换中，跳过本次定时器触发
                     if (state.isTransitioning) {
                         return;
@@ -395,6 +434,13 @@
                     img.src = nextImage;
                         
                     img.onload = () => {
+                        // 再次检查歌曲是否已切换
+                        if (state.currentSongHash !== currentSongHashForAlternating) {
+                            console.log('[ArtistWallpaper] 图片加载中歌曲已切换，放弃');
+                            state.isTransitioning = false;
+                            return;
+                        }
+                        
                         // 确保图片完全解码后再切换
                         if ('decode' in img) {
                             img.decode().then(() => {
@@ -430,8 +476,13 @@
      * 使用专辑封面作为背景
      */
     function useAlbumCoverAsBackground(albumCoverUrl) {
+        // 清除之前的轮播状态
         clearRotationTimer();
         state.artistBackgroundImages = [];
+        state.backgroundImage1 = null;
+        state.backgroundImage2 = null;
+        state.activeLayer = 1;
+        state.isTransitioning = false;
         
         const defaultBg = albumCoverUrl || 'https://random.MoeJue.cn/randbg.php';
         updateBackgroundLayer(defaultBg);
@@ -591,68 +642,77 @@
 
         // 生成当前歌曲的唯一标识
         const songHash = `${currentSong.id || ''}_${currentSong.title || ''}_${currentSong.author || ''}`;
+        
+        console.log('[ArtistWallpaper] 歌曲切换:', songHash);
+        
+        // 立即标记当前歌曲 hash，防止并发请求污染
         state.currentSongHash = songHash;
 
-        // 防止并发请求，如果正在获取写真，先取消之前的请求
-        state.isFetchingWallpaper = false;
+        // 标记开始获取，阻止其他并发请求
+        state.isFetchingWallpaper = true;
 
-        const artistId = currentSong.author_id || currentSong.singerid;
-        const author = currentSong.author || '';
-
-        // 立即清除 DOM 中的背景图层缓存，确保视觉上立刻清空
-        clearBackgroundLayers();
-        
-        // 清除之前的写真和定时器，以及所有状态
+        // 立即清除所有状态和定时器，防止旧数据污染
         clearRotationTimer();
         state.artistBackgroundImages = [];
         state.backgroundImage1 = null;
         state.backgroundImage2 = null;
         state.activeLayer = 1;
-        state.isTransitioning = false; // 重置切换标志
+        state.isTransitioning = false;
+        state.currentBackgroundIndex = 0;
         
-        state.isFetchingWallpaper = true; // 标记开始获取
+        // 立即清除 DOM 中的背景图层缓存，确保视觉上立刻清空
+        clearBackgroundLayers();
+        
+        const artistId = currentSong.author_id || currentSong.singerid;
+        const author = currentSong.author || '';
 
-        if (artistId) {
-            // 检查是否有多个歌手
-            const artistIds = String(artistId).split(/[&/,、]/).map(id => id.trim()).filter(id => id);
-            const artistNames = author.split(/[&/,、]/).map(name => name.trim()).filter(name => name);
-            
-            if (artistIds.length > 1) {
-                // 多歌手情况：获取所有歌手的写真
-                await fetchMultipleArtistsBackground(artistIds, artistNames, songHash);
-            } else {
-                // 单歌手情况
-                await fetchArtistBackground(artistNames[0] || author, artistIds[0], songHash);
-            }
-        } else if (author) {
-            // 歌曲数据中没有歌手 ID，尝试通过搜索获取
-            const artistNames = author.split(/[&/,、]/).map(name => name.trim()).filter(name => name);
-            
-            if (artistNames.length > 1) {
-                // 多歌手情况：分别搜索每个歌手
-                const searchPromises = artistNames.map(name => fetchArtistIdByName(name));
+        try {
+            if (artistId) {
+                // 检查是否有多个歌手
+                const artistIds = String(artistId).split(/[&/,、]/).map(id => id.trim()).filter(id => id);
+                const artistNames = author.split(/[&/,、]/).map(name => name.trim()).filter(name => name);
                 
-                const results = await Promise.all(searchPromises);
-                const ids = results.filter(id => id !== null);
-                if (ids.length > 0) {
-                    await fetchMultipleArtistsBackground(ids, artistNames, songHash);
+                if (artistIds.length > 1) {
+                    // 多歌手情况：获取所有歌手的写真
+                    await fetchMultipleArtistsBackground(artistIds, artistNames, songHash);
                 } else {
-                    useAlbumCoverAsBackground(currentSong.img);
+                    // 单歌手情况
+                    await fetchArtistBackground(artistNames[0] || author, artistIds[0], songHash);
+                }
+            } else if (author) {
+                // 歌曲数据中没有歌手 ID，尝试通过搜索获取
+                const artistNames = author.split(/[&/,、]/).map(name => name.trim()).filter(name => name);
+                
+                if (artistNames.length > 1) {
+                    // 多歌手情况：分别搜索每个歌手
+                    const searchPromises = artistNames.map(name => fetchArtistIdByName(name));
+                    
+                    const results = await Promise.all(searchPromises);
+                    const ids = results.filter(id => id !== null);
+                    if (ids.length > 0) {
+                        await fetchMultipleArtistsBackground(ids, artistNames, songHash);
+                    } else {
+                        useAlbumCoverAsBackground(currentSong.img);
+                    }
+                } else {
+                    // 单歌手情况
+                    const id = await fetchArtistIdByName(artistNames[0] || author);
+                    if (id) {
+                        await fetchArtistBackground(artistNames[0] || author, id, songHash);
+                    } else {
+                        useAlbumCoverAsBackground(currentSong.img);
+                    }
                 }
             } else {
-                // 单歌手情况
-                const id = await fetchArtistIdByName(artistNames[0] || author);
-                if (id) {
-                    await fetchArtistBackground(artistNames[0] || author, id, songHash);
-                } else {
-                    useAlbumCoverAsBackground(currentSong.img);
-                }
+                useAlbumCoverAsBackground(currentSong.img);
             }
-        } else {
+        } catch (error) {
+            console.error('[ArtistWallpaper] 处理歌曲切换失败:', error);
             useAlbumCoverAsBackground(currentSong.img);
+        } finally {
+            // 无论成功或失败，都标记获取完成
+            state.isFetchingWallpaper = false;
         }
-        
-        state.isFetchingWallpaper = false; // 标记获取完成
     }
 
     /**
